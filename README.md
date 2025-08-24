@@ -85,7 +85,7 @@ chmod 700 certs 【DONE】
 #### 2.2 部署应用代码
 
 ```bash
-# 克隆代码仓库（替换为实际仓库地址）
+# 克隆代码仓库
 git clone https://github.com/imTroyZhu/pay-mvp.git
 
 # 安装项目依赖
