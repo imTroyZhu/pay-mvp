@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>微信支付</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .payment-form {
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+        }
+        input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #07c160;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #06ad56;
+        }
+        .qrcode-container {
+            text-align: center;
+            margin-top: 20px;
+            display: none;
+        }
+        .qrcode-container img {
+            max-width: 200px;
+            margin-bottom: 10px;
+        }
+        .payment-status {
+            text-align: center;
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background-color: #f0f9eb;
+            color: #67c23a;
+        }
+        .pending {
+            background-color: #fdf6ec;
+            color: #e6a23c;
+        }
+        .error {
+            background-color: #fef0f0;
+            color: #f56c6c;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>微信扫码支付</h1>
+        
+        <div class="payment-form" id="paymentForm">
+            <div class="form-group">
+                <label for="amount">支付金额（元）</label>
+                <input type="number" id="amount" min="0.01" step="0.01" required>
+            </div>
+            <button onclick="createPayment()">生成支付二维码</button>
+        </div>
+
+        <div class="qrcode-container" id="qrcodeContainer">
+            <img id="qrcode" src="" alt="支付二维码">
+            <p>请使用微信扫描二维码完成支付</p>
+        </div>
+
+        <div class="payment-status" id="paymentStatus"></div>
+    </div>
+
+    <script>
+        let orderId = null;
+        let statusCheckInterval = null;
+
+        async function createPayment() {
+            const amount = document.getElementById('amount').value;
+            if (!amount || amount <= 0) {
+                alert('请输入有效的支付金额');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/payment/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        amount: Math.round(amount * 100), // 转换为分
+                        description: '商品购买'
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('qrcode').src = data.qrcode;
+                    document.getElementById('qrcodeContainer').style.display = 'block';
+                    document.getElementById('paymentStatus').style.display = 'block';
+                    document.getElementById('paymentStatus').className = 'payment-status pending';
+                    document.getElementById('paymentStatus').textContent = '等待支付...';
+                    
+                    orderId = data.orderId;
+                    startStatusCheck();
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (error) {
+                alert('生成支付二维码失败：' + error.message);
+            }
+        }
+
+        function startStatusCheck() {
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+
+            statusCheckInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/payment/status/${orderId}`);
+                    const data = await response.json();
+
+                    if (data.success) {
+                        const statusElement = document.getElementById('paymentStatus');
+                        
+                        if (data.status === 'SUCCESS') {
+                            statusElement.className = 'payment-status success';
+                            statusElement.textContent = '支付成功！';
+                            clearInterval(statusCheckInterval);
+                        } else if (data.status === 'CLOSED' || data.status === 'PAYERROR') {
+                            statusElement.className = 'payment-status error';
+                            statusElement.textContent = '支付失败';
+                            clearInterval(statusCheckInterval);
+                        }
+                    }
+                } catch (error) {
+                    console.error('查询支付状态失败：', error);
+                }
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
